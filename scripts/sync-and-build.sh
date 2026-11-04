@@ -11,10 +11,23 @@ set -euo pipefail
 #  - Optional: publishes artifacts to GitHub Releases (--release)
 # ==============================================================================
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="${VW_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$REPO_ROOT"
 
-PATCH_FILE="$REPO_ROOT/patches/1password-item-share.patch"
+# Re-exec from a temp copy: checking out an upstream tag removes scripts/ and
+# patches/ (they only exist on our branch), which would break a running script
+# and silently skip the patch.
+if [ -z "${VW_SYNC_TMP:-}" ]; then
+  VW_SYNC_TMP="$(mktemp -d)"
+  cp "$REPO_ROOT/scripts/sync-and-build.sh" "$VW_SYNC_TMP/sync-and-build.sh"
+  cp -R "$REPO_ROOT/patches" "$VW_SYNC_TMP/patches"
+  cp "$REPO_ROOT/.github/workflows/build-custom-share.yml" "$VW_SYNC_TMP/build-custom-share.yml"
+  export VW_SYNC_TMP VW_REPO_ROOT="$REPO_ROOT"
+  exec bash "$VW_SYNC_TMP/sync-and-build.sh" "$@"
+fi
+trap 'rm -rf "$VW_SYNC_TMP"' EXIT
+
+PATCH_FILE="$VW_SYNC_TMP/patches/1password-item-share.patch"
 DIST_DIR="$REPO_ROOT/dist"
 STATE_FILE="$DIST_DIR/.last_built_tag"
 
@@ -23,6 +36,8 @@ CURRENT_ONLY=false
 PUBLISH_RELEASE=false
 SKIP_WEB=false
 SKIP_BROWSER=false
+RESYNC=false
+PREPARE_ONLY=false
 
 for arg in "$@"; do
   case "$arg" in
@@ -31,9 +46,11 @@ for arg in "$@"; do
     --release) PUBLISH_RELEASE=true ;;
     --web-only) SKIP_BROWSER=true ;;
     --browser-only) SKIP_WEB=true ;;
+    --resync) RESYNC=true; FORCE=true ;;
+    --prepare-only) PREPARE_ONLY=true ;;
     *)
       echo "Unknown option: $arg"
-      echo "Usage: $0 [--current] [--force] [--release] [--web-only] [--browser-only]"
+      echo "Usage: $0 [--current] [--force] [--release] [--web-only] [--browser-only] [--resync] [--prepare-only]"
       exit 1
       ;;
   esac
@@ -43,7 +60,7 @@ mkdir -p "$DIST_DIR"
 
 if [ "$CURRENT_ONLY" = false ]; then
   echo "[1/6] Checking latest tag from vaultwarden/vw_web_builds..."
-  LATEST_TAG=$(git ls-remote --tags --refs --sort="-v:refname" https://github.com/vaultwarden/vw_web_builds.git | head -n1 | awk -F/ '{print $NF}')
+  LATEST_TAG=${VW_SYNC_TAG:-$(git ls-remote --tags --refs --sort="-v:refname" https://github.com/vaultwarden/vw_web_builds.git | head -n1 | awk -F/ '{print $NF}')}
   if [ -z "$LATEST_TAG" ]; then
     echo "Error: Could not determine latest upstream tag."
     exit 1
@@ -56,23 +73,44 @@ if [ "$CURRENT_ONLY" = false ]; then
   fi
 
   CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-  if [ "$CURRENT_TAG" != "$LATEST_TAG" ] && [ "${ CURRENT_TAG%+0}" != "${LATEST_TAG%+0}" ]; then
+  if [ "$RESYNC" = true ] || { [ "$CURRENT_TAG" != "$LATEST_TAG" ] && [ "${CURRENT_TAG%+0}" != "${LATEST_TAG%+0}" ]; }; then
     echo "[2/6] Fetching upstream tag $LATEST_TAG..."
+    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+      echo "Error: working tree has uncommitted changes; commit or stash them first."
+      exit 1
+    fi
+    git config user.email >/dev/null || git config user.email "vw-sync@localhost"
+    git config user.name  >/dev/null || git config user.name  "vw-sync"
     git remote add upstream https://github.com/vaultwarden/vw_web_builds.git 2>/dev/null || true
-    git fetch --depth=10 upstream "refs/tags/$LATEST_TAG:refs/tags/$LATEST_TAG"
-    git checkout -B "custom-${LATEST_TAG}" "refs/tags/$LATEST_TAG"
+    git fetch --depth=30 upstream "refs/tags/$LATEST_TAG:refs/tags/$LATEST_TAG"
+    WORK_BRANCH="${VW_SYNC_BRANCH:-custom-1password-share}"
+    git checkout -B "$WORK_BRANCH" "refs/tags/$LATEST_TAG"
 
-    REMOVE_CLIENTS_SHA=$(git log -n 10 --grep="remove other clients" --format="%H" | head -n1)
-    if [ -n "$REMOVE_CLIENTS_SHA" ]; then
-      echo " -> Reverting commit $REMOVE_CLIENTS_SHA ('remove other clients') to restore apps/browser..."
-      git revert --no-edit "$REMOVE_CLIENTS_SHA"
+    REMOVE_CLIENTS_SHA=$(git log -n 30 --grep="remove other clients" --format="%H" | head -n1)
+    if [ -z "$REMOVE_CLIENTS_SHA" ]; then
+      echo "Error: commit 'remove other clients' not found in $LATEST_TAG; cannot restore apps/browser."
+      exit 1
     fi
+    echo " -> Reverting $REMOVE_CLIENTS_SHA ('remove other clients') to restore apps/browser..."
+    git revert --no-edit "$REMOVE_CLIENTS_SHA"
 
-    if [ -f "$PATCH_FILE" ]; then
-      echo " -> Applying 1Password Item Share patch ($PATCH_FILE)..."
-      git apply --3way "$PATCH_FILE"
-      git commit -am "feat(share): enable 1Password-style 1-click item sharing for Vaultwarden"
+    echo " -> Applying 1Password Item Share patch..."
+    if ! git apply --3way "$PATCH_FILE"; then
+      echo "Error: patch no longer applies cleanly on $LATEST_TAG. Resolve conflicts manually, then regenerate patches/1password-item-share.patch."
+      exit 2
     fi
+    git add -A apps libs
+    git commit -m "feat(share): enable 1Password-style 1-click item sharing for Vaultwarden"
+
+    echo " -> Restoring build tooling (scripts/, patches/, workflow)..."
+    mkdir -p scripts patches .github/workflows
+    cp "$VW_SYNC_TMP/sync-and-build.sh" scripts/sync-and-build.sh
+    chmod +x scripts/sync-and-build.sh
+    cp "$VW_SYNC_TMP/patches/"* patches/
+    cp "$VW_SYNC_TMP/build-custom-share.yml" .github/workflows/build-custom-share.yml
+    git add scripts/sync-and-build.sh patches .github/workflows/build-custom-share.yml
+    git commit -m "chore: custom build tooling (sync-and-build.sh, patch, workflow)"
+    SYNCED=true
   fi
 else
   LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "custom")
@@ -82,11 +120,18 @@ fi
 CLEAN_VERSION="${LATEST_TAG#v}"
 CLEAN_VERSION="${CLEAN_VERSION%+*}"
 
-if [ ! -d "$REPO_ROOT/node_modules" ]; then
+if [ "$PREPARE_ONLY" = true ]; then
+  echo "✅ Source prepared on branch $(git branch --show-current) (--prepare-only, no build)."
+  exit 0
+fi
+
+LOCK_HASH=$(sha256sum package-lock.json | cut -d' ' -f1)
+if [ ! -d "$REPO_ROOT/node_modules" ] || [ "$(cat node_modules/.vw-lock-hash 2>/dev/null)" != "$LOCK_HASH" ]; then
   echo "[3/6] Installing monorepo dependencies (npm ci)..."
   npm ci --ignore-scripts --no-audit --no-fund
+  echo "$LOCK_HASH" > node_modules/.vw-lock-hash
 else
-  echo "[3/6] node_modules already present, skipping npm ci."
+  echo "[3/6] node_modules matches package-lock.json, skipping npm ci."
 fi
 
 export NODE_OPTIONS="--max-old-space-size=8192"
@@ -133,6 +178,10 @@ if [ "$PUBLISH_RELEASE" = true ]; then
   GH_REPO="${GH_REPO:-wind7vn/vw_web_builds}"
   echo "[6/6] Publishing release artifacts to GitHub ($GH_REPO)..."
   RELEASE_TAG="custom-${CLEAN_VERSION}"
+  if [ "${SYNCED:-false}" = true ]; then
+    echo " -> Pushing rebuilt branch $(git branch --show-current) to origin..."
+    git push --force-with-lease origin "HEAD:$(git branch --show-current)"
+  fi
   ASSETS=()
   [ -f "$DIST_DIR/bw_web_vault.tar.gz" ] && ASSETS+=("$DIST_DIR/bw_web_vault.tar.gz")
   [ -f "$DIST_DIR/browser-chrome-${CLEAN_VERSION}.zip" ] && ASSETS+=("$DIST_DIR/browser-chrome-${CLEAN_VERSION}.zip")

@@ -22,7 +22,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 15
+          fetch-depth: 0
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -30,15 +30,20 @@ jobs:
           node-version: "22"
           cache: "npm"
 
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Run Sync & Build Script
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x ./scripts/sync-and-build.sh
           if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
-            ./scripts/sync-and-build.sh --current --force --release
+            ./scripts/sync-and-build.sh --force --release
           else
-            ./scripts/sync-and-build.sh --current --release
+            ./scripts/sync-and-build.sh --release
           fi
 
       - name: Upload Build Artifacts
