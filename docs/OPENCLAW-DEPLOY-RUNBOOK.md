@@ -19,6 +19,7 @@ Work through the phases in order. Each phase has a **check** step: do not start 
 | Release with build artifacts | `https://github.com/wind7vn/vw_web_builds/releases/tag/custom-2026.10.1` |
 | Web vault artifact | `bw_web_vault.tar.gz` (≈41.8 MB, unpacks to `web-vault/`) |
 | Extension artifact | `browser-chrome-2026.10.1.zip` (≈25.7 MB, Chrome/Edge/Brave MV3, unpacked) |
+| SHA-256 | web vault `d7cac782f2372c6ffb551c8dfce5036528d94be5bf29d49f86f8a52d5563a027`; extension `2de7bb9083f50d91f6ba79595675ead46b29343063c5871381b8a007e2a40ff8` |
 | Build host (already has a working checkout + node_modules) | `/root/projects/vw_web_builds` on the Hermes machine |
 
 Direct download URLs:
@@ -95,10 +96,10 @@ If the database is PostgreSQL or MySQL (`DATABASE_URL` set) instead of SQLite, d
 mkdir -p /opt/vaultwarden-custom && cd /opt/vaultwarden-custom
 curl -fL -o bw_web_vault.tar.gz \
   https://github.com/wind7vn/vw_web_builds/releases/download/custom-2026.10.1/bw_web_vault.tar.gz
-# Verify against the digest GitHub reports for the asset:
-curl -s https://api.github.com/repos/wind7vn/vw_web_builds/releases/tags/custom-2026.10.1 \
-  | grep -A2 '"name": "bw_web_vault.tar.gz"' ; sha256sum bw_web_vault.tar.gz
-# (If the API shows "digest": "sha256:...", it must equal the sha256sum output.)
+# Verify (release custom-2026.10.1). Must print "bw_web_vault.tar.gz: OK":
+echo "d7cac782f2372c6ffb551c8dfce5036528d94be5bf29d49f86f8a52d5563a027  bw_web_vault.tar.gz" | sha256sum -c -
+# For other releases, read the expected digest from the API:
+#   gh release view custom-<ver> -R wind7vn/vw_web_builds --json assets -q '.assets[]|"\(.name) \(.digest)"' 
 rm -rf web-vault.new && mkdir web-vault.new && tar -xzf bw_web_vault.tar.gz -C web-vault.new --strip-components=1
 cat web-vault.new/version.json        # expect {"version":"2026.10.1"} (or similar)
 cat web-vault.new/vw-version.json     # expect 2026.10.1-1p-share
