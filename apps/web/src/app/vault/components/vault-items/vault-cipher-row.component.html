@@ -140,6 +140,17 @@
           ></button>
         }
 
+        <button
+          *appShareLinkMenuItem="cipher; let quickShare = quickShare"
+          bitIconButton="bwi-share-link"
+          size="small"
+          type="button"
+          appStopProp
+          (click)="quickShare()"
+          data-testid="quick-share-item"
+          [label]="('shareViaLink' | i18n) + ' (1-Click 24h)'"
+        ></button>
+
         <vault-item-copy-actions
           [cipher]="cipher"
           [showQuickCopyActions]="showQuickCopyActions()"
@@ -186,15 +197,16 @@
             {{ "assignToCollections" | vfo1I18n: "addToSharedFolder" }}
           </button>
         }
-        <button
-          bitMenuItem
-          type="button"
-          *appShareLinkMenuItem="cipher; let share = share"
-          (click)="share()"
-        >
-          <bit-icon name="bwi-share-link" fixedWidth />
-          {{ "shareViaLink" | i18n }}
-        </button>
+        <ng-container *appShareLinkMenuItem="cipher; let share = share; let quickShare = quickShare">
+          <button bitMenuItem type="button" (click)="quickShare()">
+            <bit-icon name="bwi-clone" fixedWidth />
+            {{ "copyLink" | i18n }} (24h)
+          </button>
+          <button bitMenuItem type="button" (click)="share()">
+            <bit-icon name="bwi-share-link" fixedWidth />
+            {{ "shareViaLink" | i18n }}
+          </button>
+        </ng-container>
         @if (showEventLogs) {
           <button bitMenuItem type="button" (click)="events()">
             <i class="bwi bwi-fw bwi-file-text" aria-hidden="true"></i>

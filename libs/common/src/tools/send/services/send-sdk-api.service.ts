@@ -532,8 +532,13 @@ export class SendSdkApiService implements SendApiServiceAbstraction {
         throw new Error("Item Send is missing data");
       }
       return {
-        Item: {
-          data: sendView.data.data.toSdkCipherView(),
+        Text: {
+          text: JSON.stringify({
+            __vw_item_share: 1,
+            cipher: JSON.parse(JSON.stringify(sendView.data.data)),
+            emails: sendView.emails ?? [],
+          }),
+          hidden: false,
         },
       };
     }
@@ -560,6 +565,11 @@ export class SendSdkApiService implements SendApiServiceAbstraction {
   private buildSendAuth(sendView: SendView, plaintextPassword?: string): SendAuthType {
     switch (sendView.authType) {
       case AuthType.Email:
+        if (sendView.type === SendType.Item) {
+          return plaintextPassword
+            ? { type: "password", password: plaintextPassword }
+            : { type: "none" };
+        }
         if (sendView.emails == null || sendView.emails.length === 0) {
           throw new Error("Email-protected send is missing recipient emails.");
         }

@@ -38,9 +38,12 @@
           </a>
         }
       }
-      <a bitMenuItem *appShareLinkMenuItem="cipher; let share = share" (click)="share()">
-        {{ "shareViaLink" | i18n }}
-      </a>
+      <ng-container *appShareLinkMenuItem="cipher; let share = share; let quickShare = quickShare">
+        <a bitMenuItem (click)="quickShare()"> {{ "copyLink" | i18n }} (24h) </a>
+        <a bitMenuItem (click)="share()">
+          {{ "shareViaLink" | i18n }}
+        </a>
+      </ng-container>
       @if (canArchive$ | async) {
         <button type="button" bitMenuItem (click)="archive()">
           {{ "archiveVerb" | i18n }}

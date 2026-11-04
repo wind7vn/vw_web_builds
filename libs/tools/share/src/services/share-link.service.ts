@@ -94,11 +94,13 @@ export class ShareLinkService {
     emails: string[],
     expiryHours: number,
     oneTimeShare: boolean,
+    password?: string,
   ): Promise<string | undefined> {
     const sendView = new SendView();
     sendView.name = this.i18nService.t("itemSendTitle", cipherView.name);
     sendView.type = SendType.Item;
-    sendView.authType = AuthType.Email;
+    const trimmedPassword = password?.trim() || undefined;
+    sendView.authType = trimmedPassword ? AuthType.Password : AuthType.None;
     sendView.emails = emails;
     sendView.deletionDate = new Date(Date.now() + expiryHours * 60 * 60 * 1000);
     sendView.expirationDate = sendView.deletionDate;
@@ -118,7 +120,7 @@ export class ShareLinkService {
     const createdSdkSendView = await this.sendSdkApiService.mutateSend(
       sendView,
       userId,
-      null as any,
+      trimmedPassword,
     );
     await this.sendSdkApiService.refreshAfterMutation(createdSdkSendView.id as any);
     const env = await firstValueFrom(this.environmentService.environment$);
@@ -209,11 +211,7 @@ export class ShareLinkService {
         switchMap((userId) => this.collectionService.decryptedCollections$(userId)),
       ),
     ]).pipe(
-      map(([ffEnabled, hasPremium, organizations, sendControlsPolicies, collections]) => {
-        // Sharing feature must be enabled and, as a premium feature, accessible
-        if (!ffEnabled || !hasPremium) {
-          return false;
-        }
+      map(([_ffEnabled, _hasPremium, organizations, sendControlsPolicies, collections]) => {
         // Cannot be shared if the cipher is undefined, archived, deleted, an SSH key, or gated
         // ("partial") by PAM
         if (
@@ -225,14 +223,8 @@ export class ShareLinkService {
         ) {
           return false;
         }
-        // Look for any policy that doesn't allow Item-type Sends, doesn't allow the email auth
-        // they require, or disables the Send feature entirely; any of these preclude sharing
-        const policyDisablingItemSends = sendControlsPolicies.find(
-          (scp) =>
-            (scp.data.allowedSendTypes && !scp.data.allowedSendTypes.includes(SendType.Item)) ||
-            scp.data.whoCanAccess === WhoCanAccessType.PasswordProtected ||
-            scp.data.disableSend,
-        );
+        // Look for any policy that disables the Send feature entirely
+        const policyDisablingItemSends = sendControlsPolicies.find((scp) => scp.data.disableSend);
         if (policyDisablingItemSends) {
           return false;
         }

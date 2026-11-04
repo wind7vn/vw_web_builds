@@ -19,6 +19,8 @@ import { ShareLinkService } from "../../services/share-link.service";
 export interface ShareLinkMenuItemContext {
   /** Opens the share drawer for the item. Bind this to the menu item's click handler. */
   share: () => Promise<void>;
+  /** 1-Click Quick Share: creates a 24h share link and copies it directly to the clipboard. */
+  quickShare: () => Promise<string | undefined>;
 }
 
 /**
@@ -76,6 +78,7 @@ export class ShareLinkMenuItemDirective {
         if (canShare) {
           this.viewContainerRef.createEmbeddedView(this.templateRef, {
             share: () => this.shareItemService.share(this.cipher()),
+            quickShare: () => this.shareItemService.quickShare(this.cipher()),
           });
         }
       });

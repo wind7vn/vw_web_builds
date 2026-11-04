@@ -134,6 +134,18 @@ export class SendService implements InternalSendServiceAbstraction {
       // FIXME: model.text.text can be null. encryptString should not be called with null values.
       send.text.text = await this.encryptService.encryptString(model.text.text, model.cryptoKey);
       send.text.hidden = model.text.hidden;
+    } else if (send.type === SendType.Item) {
+      // Vaultwarden compatibility: pack SendType.Item into SendType.Text envelope
+      send.type = SendType.Text;
+      send.emails = null;
+      send.text = new SendText();
+      const itemPayload = JSON.stringify({
+        __vw_item_share: 1,
+        cipher: model.data?.data ? JSON.parse(JSON.stringify(model.data.data)) : null,
+        emails: model.emails ?? [],
+      });
+      send.text.text = await this.encryptService.encryptString(itemPayload, model.cryptoKey);
+      send.text.hidden = false;
     } else if (send.type === SendType.File) {
       send.file = new SendFile();
       if (file != null) {

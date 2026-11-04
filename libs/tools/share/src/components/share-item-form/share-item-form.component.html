@@ -39,17 +39,25 @@
         {{ "shareEmailVerificationDescription" | i18n }}
       </p>
       <bit-form-field>
-        <bit-label class="tw-font-normal">{{ "emails" | i18n }}</bit-label>
+        <bit-label class="tw-font-normal">{{ "emails" | i18n }} ({{ "optional" | i18n }})</bit-label>
         <textarea
           bitInput
           id="share-item-form_textarea_emails"
           formControlName="emails"
-          rows="3"
+          placeholder="Anyone with the link (or enter recipient notes/emails)"
+          rows="2"
         ></textarea>
       </bit-form-field>
-      <p bitTypography="helper" class="tw-text-fg-body tw-font-normal -tw-mt-2 tw-mb-3">
-        {{ "enterMultipleEmailsSeparatedByComma" | i18n }}
-      </p>
+      <bit-form-field>
+        <bit-label class="tw-font-normal">{{ "password" | i18n }} ({{ "optional" | i18n }})</bit-label>
+        <input
+          bitInput
+          type="password"
+          id="share-item-form_input_password"
+          formControlName="password"
+          placeholder="Leave blank for 1-click access without password"
+        />
+      </bit-form-field>
       <bit-form-field>
         <bit-label class="tw-font-normal">{{ "linkExpiresAfter" | i18n }}</bit-label>
         <bit-select bitInput id="share-item-form_select_expiry" formControlName="expiryHours">

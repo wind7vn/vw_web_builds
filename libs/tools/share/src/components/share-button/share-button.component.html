@@ -1,13 +1,26 @@
 @if (canShare()) {
-  <button
-    type="button"
-    class="tw-mt-4"
-    bitButton
-    buttonType="secondary"
-    startIcon="bwi-share-link"
-    block
-    (click)="share()"
-  >
-    {{ "shareVerb" | i18n }}
-  </button>
+  <div class="tw-mt-4 tw-flex tw-gap-2">
+    <button
+      type="button"
+      class="tw-flex-1"
+      bitButton
+      buttonType="secondary"
+      startIcon="bwi-share-link"
+      block
+      (click)="share()"
+    >
+      {{ "shareVerb" | i18n }}
+    </button>
+    <button
+      type="button"
+      class="tw-flex-1"
+      bitButton
+      buttonType="secondary"
+      startIcon="bwi-clone"
+      block
+      (click)="quickShare()"
+    >
+      {{ "copyLink" | i18n }} (24h)
+    </button>
+  </div>
 }

@@ -13,8 +13,55 @@ import { Send } from "../models/domain/send";
 import { SendAccess } from "../models/domain/send-access";
 import { SendAccessResponse } from "../models/response/send-access.response";
 import { SendAccessView } from "../models/view/send-access.view";
+import { SendItemView } from "../models/view/send-item.view";
 import { SendView } from "../models/view/send.view";
 import { SendType } from "../types/send-type";
+import { CipherView } from "../../../vault/models/view/cipher.view";
+
+export const VW_ITEM_SHARE_MARKER = "__vw_item_share";
+
+export function unwrapVwSharedItemSendView(sendView: SendView): SendView {
+  if (
+    sendView?.type === SendType.Text &&
+    typeof sendView.text?.text === "string" &&
+    sendView.text.text.includes(`"${VW_ITEM_SHARE_MARKER}":1`)
+  ) {
+    try {
+      const parsed = JSON.parse(sendView.text.text);
+      if (parsed && parsed[VW_ITEM_SHARE_MARKER] === 1 && parsed.cipher) {
+        sendView.type = SendType.Item;
+        sendView.data = new SendItemView();
+        sendView.data.data = CipherView.fromJSON(parsed.cipher);
+        if (Array.isArray(parsed.emails) && (!sendView.emails || sendView.emails.length === 0)) {
+          sendView.emails = parsed.emails;
+        }
+      }
+    } catch {
+      // Ignore malformed JSON and leave as normal Text Send
+    }
+  }
+  return sendView;
+}
+
+export function unwrapVwSharedItemSendAccessView(sendAccessView: SendAccessView): SendAccessView {
+  if (
+    sendAccessView?.type === SendType.Text &&
+    typeof sendAccessView.text?.text === "string" &&
+    sendAccessView.text.text.includes(`"${VW_ITEM_SHARE_MARKER}":1`)
+  ) {
+    try {
+      const parsed = JSON.parse(sendAccessView.text.text);
+      if (parsed && parsed[VW_ITEM_SHARE_MARKER] === 1 && parsed.cipher) {
+        sendAccessView.type = SendType.Item;
+        sendAccessView.data = new SendItemView();
+        sendAccessView.data.data = CipherView.fromJSON(parsed.cipher);
+      }
+    } catch {
+      // Ignore malformed JSON and leave as normal Text Send
+    }
+  }
+  return sendAccessView;
+}
 
 /**
  * Service for doing specific decryption operations for Send and SendAccess objects. It is expected
@@ -43,12 +90,12 @@ export class SendDecryptionService {
             const sendView = SendView.fromSdkSendView(sdkSendView);
             const decKey = await this.legacyCompatKeyService.makeSendKey(sendView.key);
             sendView.cryptoKey = decKey;
-            return sendView;
+            return unwrapVwSharedItemSendView(sendView);
           }),
         ),
       );
     } else {
-      return send.decrypt(userId);
+      return unwrapVwSharedItemSendView(await send.decrypt(userId));
     }
   }
 
@@ -64,7 +111,9 @@ export class SendDecryptionService {
             using ref = sdk.take();
             const sendsClient = ref.value.sends();
             const sendViews = sends.map((s) =>
-              SendView.fromSdkSendView(sendsClient.decrypt_send(s.toSdkSend())),
+              unwrapVwSharedItemSendView(
+                SendView.fromSdkSendView(sendsClient.decrypt_send(s.toSdkSend())),
+              ),
             );
             for (const s of sendViews) {
               s.cryptoKey = await this.legacyCompatKeyService.makeSendKey(s.key);
@@ -78,7 +127,8 @@ export class SendDecryptionService {
       // is and the server should filter out any Item Sends if the latter is off, but just to be safe
       // we filter here as well.
       const nonItemSends = sends.filter((s) => s.type !== SendType.Item);
-      return Promise.all(nonItemSends.map((s) => s.decrypt(userId)));
+      const decrypted = await Promise.all(nonItemSends.map((s) => s.decrypt(userId)));
+      return decrypted.map((s) => unwrapVwSharedItemSendView(s));
     }
   }
 
@@ -92,11 +142,11 @@ export class SendDecryptionService {
       const sdkAccessResponse = SendAccessResponse.toSdkAccessResponse(sendResponse);
       const key = Utils.fromArrayToUrlB64(keyArray);
       const sdkSendAccessView = SendClient.decrypt_send_access(key, sdkAccessResponse);
-      return [SendAccessView.fromSdk(sdkSendAccessView), decKey];
+      return [unwrapVwSharedItemSendAccessView(SendAccessView.fromSdk(sdkSendAccessView)), decKey];
     } else {
       const sendAccess = new SendAccess(sendResponse);
       const sendAccessView = await sendAccess.decrypt(decKey);
-      return [sendAccessView, decKey];
+      return [unwrapVwSharedItemSendAccessView(sendAccessView), decKey];
     }
   }
 }

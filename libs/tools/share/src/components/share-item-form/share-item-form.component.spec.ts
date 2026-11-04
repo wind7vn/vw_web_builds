@@ -118,7 +118,7 @@ describe("ShareItemFormComponent", () => {
   });
 
   it("should not create link when form is invalid", async () => {
-    component.form.controls.emails.setValue("");
+    component.form.controls.emails.setValue("not-an-email");
     await component.createAndCopyLink();
     expect(platformUtilsService.copyToClipboard).not.toHaveBeenCalled();
   });
@@ -147,7 +147,7 @@ describe("ShareItemFormComponent", () => {
     expect(shareLinkService.createShareLink).toHaveBeenCalledWith(
       mockCipher,
       ["a@test.com", "b@test.com", "c@test.com"],
-      168,
+      24,
       false,
     );
   });

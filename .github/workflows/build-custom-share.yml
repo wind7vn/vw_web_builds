@@ -1,0 +1,50 @@
+name: Build Custom Vaultwarden Web Vault + Browser Extension (1Password Share)
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "Force rebuild even if latest tag matches"
+        required: false
+        default: "false"
+        type: boolean
+  schedule:
+    # Check weekly on Mondays at 02:00 UTC for new upstream vaultwarden/vw_web_builds tags
+    - cron: "0 2 * * 1"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 15
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Run Sync & Build Script
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x ./scripts/sync-and-build.sh
+          if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
+            ./scripts/sync-and-build.sh --current --force --release
+          else
+            ./scripts/sync-and-build.sh --current --release
+          fi
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vaultwarden-1password-share-builds
+          path: |
+            dist/bw_web_vault.tar.gz
+            dist/browser-chrome-*.zip

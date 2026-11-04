@@ -51,4 +51,10 @@ export class ShareButtonComponent {
     });
     await this.hostDialog?.close();
   }
+
+  protected async quickShare(): Promise<void> {
+    await this.shareItemService.quickShare(this.cipher(), {
+      alreadyVerified: this.skipPasswordPrompt() || this.hostDialog != null,
+    });
+  }
 }

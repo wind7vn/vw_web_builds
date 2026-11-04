@@ -16,7 +16,6 @@ import {
   ReactiveFormsModule,
   ValidationErrors,
   ValidatorFn,
-  Validators,
 } from "@angular/forms";
 import { combineLatest, switchMap } from "rxjs";
 
@@ -137,13 +136,13 @@ export class ShareItemFormComponent implements OnDestroy {
   private readonly emailListValidator: ValidatorFn = (
     control: AbstractControl,
   ): ValidationErrors | null => {
-    if (!control.value) {
+    if (!control.value || !control.value.trim()) {
       return null;
     }
     const emails = control.value.split(",").map((e: string) => e.trim());
     const nonEmptyEmails = emails.filter((e: string) => e.length > 0);
     if (nonEmptyEmails.length === 0) {
-      return { required: true };
+      return null;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const invalidEmails = nonEmptyEmails.filter((e: string) => !emailRegex.test(e));
@@ -187,9 +186,12 @@ export class ShareItemFormComponent implements OnDestroy {
   readonly form = new FormGroup({
     emails: new FormControl("", {
       nonNullable: true,
-      validators: [Validators.required, this.emailListValidator, this.emailsMaxLengthValidator],
+      validators: [this.emailListValidator, this.emailsMaxLengthValidator],
     }),
-    expiryHours: new FormControl<SendDeletionDatePreset>(SendDeletionDatePreset.SevenDays, {
+    password: new FormControl("", {
+      nonNullable: true,
+    }),
+    expiryHours: new FormControl<SendDeletionDatePreset>(SendDeletionDatePreset.OneDay, {
       nonNullable: true,
     }),
     oneTimeShare: new FormControl(false, { nonNullable: true }),
@@ -318,12 +320,20 @@ export class ShareItemFormComponent implements OnDestroy {
       .filter((e) => e.length > 0);
 
     try {
-      const link = await this.shareLinkService.createShareLink(
-        currentCipher,
-        emails,
-        formValue.expiryHours,
-        formValue.oneTimeShare,
-      );
+      const link = formValue.password?.trim()
+        ? await this.shareLinkService.createShareLink(
+            currentCipher,
+            emails,
+            formValue.expiryHours,
+            formValue.oneTimeShare,
+            formValue.password,
+          )
+        : await this.shareLinkService.createShareLink(
+            currentCipher,
+            emails,
+            formValue.expiryHours,
+            formValue.oneTimeShare,
+          );
 
       if (link) {
         this.platformUtilsService.copyToClipboard(link);
@@ -332,6 +342,7 @@ export class ShareItemFormComponent implements OnDestroy {
           message: this.i18nService.t("linkSavedAndCopied"),
         });
         this.form.controls.emails.reset();
+        this.form.controls.password.reset();
         return true;
       } else {
         this.toastService.showToast({
@@ -351,8 +362,11 @@ export class ShareItemFormComponent implements OnDestroy {
   }
 
   protected linkEmailDisplay(emails: string[]): string {
-    if (emails.length <= 1) {
-      return emails[0] ?? "";
+    if (!emails || emails.length === 0) {
+      return "Anyone with the link";
+    }
+    if (emails.length === 1) {
+      return emails[0] ?? "Anyone with the link";
     }
     return `${emails[0]}, +${emails.length - 1}`;
   }
