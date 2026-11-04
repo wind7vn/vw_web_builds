@@ -22,6 +22,7 @@ if [ -z "${VW_SYNC_TMP:-}" ]; then
   cp "$REPO_ROOT/scripts/sync-and-build.sh" "$VW_SYNC_TMP/sync-and-build.sh"
   cp -R "$REPO_ROOT/patches" "$VW_SYNC_TMP/patches"
   cp "$REPO_ROOT/.github/workflows/build-custom-share.yml" "$VW_SYNC_TMP/build-custom-share.yml"
+  [ -d "$REPO_ROOT/docs" ] && cp -R "$REPO_ROOT/docs" "$VW_SYNC_TMP/docs"
   export VW_SYNC_TMP VW_REPO_ROOT="$REPO_ROOT"
   exec bash "$VW_SYNC_TMP/sync-and-build.sh" "$@"
 fi
@@ -108,6 +109,7 @@ if [ "$CURRENT_ONLY" = false ]; then
     chmod +x scripts/sync-and-build.sh
     cp "$VW_SYNC_TMP/patches/"* patches/
     cp "$VW_SYNC_TMP/build-custom-share.yml" .github/workflows/build-custom-share.yml
+    [ -d "$VW_SYNC_TMP/docs" ] && mkdir -p docs && cp -R "$VW_SYNC_TMP/docs/." docs/ && git add docs
     grep -qxF '/dist/' .gitignore || echo '/dist/' >> .gitignore
     git add .gitignore scripts/sync-and-build.sh patches .github/workflows/build-custom-share.yml
     git commit -m "chore: custom build tooling (sync-and-build.sh, patch, workflow)"
