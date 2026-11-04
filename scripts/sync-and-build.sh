@@ -108,7 +108,8 @@ if [ "$CURRENT_ONLY" = false ]; then
     chmod +x scripts/sync-and-build.sh
     cp "$VW_SYNC_TMP/patches/"* patches/
     cp "$VW_SYNC_TMP/build-custom-share.yml" .github/workflows/build-custom-share.yml
-    git add scripts/sync-and-build.sh patches .github/workflows/build-custom-share.yml
+    grep -qxF '/dist/' .gitignore || echo '/dist/' >> .gitignore
+    git add .gitignore scripts/sync-and-build.sh patches .github/workflows/build-custom-share.yml
     git commit -m "chore: custom build tooling (sync-and-build.sh, patch, workflow)"
     SYNCED=true
   fi
