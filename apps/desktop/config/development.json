@@ -1,0 +1,6 @@
+{
+  "devFlags": {
+    "configRetrievalIntervalMs": 5000
+  },
+  "flags": {}
+}
